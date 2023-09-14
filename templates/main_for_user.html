@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block content %}
+<p>Hello, World!</p>
+<form action="" method="post">
+    <div class="container">
+        <label for="message"><b>message</b></label>
+        <input type="text" placeholder="put your message here" name="message" 
+        value="{{request.form.message }}" required>
+        
+        <button type="submit" name="save_message" value="Save">Save</button>
+    </div>
+    </form>
+{% endblock %}

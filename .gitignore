@@ -1,0 +1,4 @@
+*.db
+*.txt
+db.py
+__pycache__
