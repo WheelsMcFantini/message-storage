@@ -1,4 +1,5 @@
 *.db
 *.txt
-db.py
+db-create.py
+db-populate.py
 __pycache__
