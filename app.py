@@ -1,4 +1,4 @@
-from flask import Flask, render_template, redirect, request, jsonify, url_for
+from flask import Flask, render_template, redirect, jsonify, url_for, request
 from flask_login import (
     LoginManager,
     UserMixin,
@@ -96,10 +96,11 @@ def login():
 
 @app.route("/api/login", methods=["POST"])
 def login():
-    data = request.json
+    print(request.form)
+    data = request.form
     username = data.get("username")
     password = data.get("password")
-
+    
     for user in users:
         if user["username"] == username and user["password"] == password:
             user_model = User()
