@@ -2,4 +2,6 @@
 *.txt
 db-create.py
 db-populate.py
+*.sql
+db*
 __pycache__

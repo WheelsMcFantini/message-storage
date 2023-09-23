@@ -2,11 +2,11 @@
 
 {% block content %}
 <p>Hello, World!</p>
-<form action="" method="post">
+<form action="{{url_for('message')}}" method="post">
     <div class="container">
         <label for="message"><b>message</b></label>
         <input type="text" placeholder="put your message here" name="message" 
-        value="{{request.form.message }}" required>
+        value="{{ content_from_db }}" required>
 
         <button type="submit" name="save_message" value="Save">Save</button>
         <button type="submit" name="write" value="write">write</button>
