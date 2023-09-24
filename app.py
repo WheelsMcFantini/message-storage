@@ -31,7 +31,7 @@ app.config.update(
 login_manager = LoginManager()
 login_manager.init_app(app)
 #login_manager.session_protection = "strong"
-#login_manager.login_view = "/login.html"
+login_manager.login_view = "home"
 #csrf = CSRFProtect(app)
 
 #DB
@@ -40,13 +40,7 @@ db_locale = "message.db"
 print(f"opening connection to db")
 #con = sqlite3.connect(db_locale)
 #temporary users
-users = [
-    {
-        "id": 1,
-        "username": "test",
-        "password": "test",
-    }
-]
+
 Base = declarative_base()
 class User(Base, UserMixin):
     __tablename__ = "users"
@@ -84,8 +78,6 @@ def get_user(user_id: int):
             return {"id": user_by_id.id, "username": user_by_id.username}
 
 
-
-#returns the user model, likely what flask uses to picture the user
 @login_manager.user_loader
 def user_loader(id: int):
     if id is None or id == "None":
@@ -104,75 +96,48 @@ def user_loader(id: int):
 @app.route("/<path:path>")
 def home(path):
     if current_user.is_authenticated:
-        return render_template("main_for_user.html")
+        #check for a message, if there is one, show it
+        user = get_user(current_user.id)
+        message_row = (session.query(Message).filter_by(user_id=user["id"]).first())
+        if message_row is not None:
+            print("message for user")
+            return render_template("main_for_user.html", message=message_row.message)
+        else:
+            print("no message for user")
+            return render_template("main_for_user.html")    
     else:
         return render_template("landing.html")
 
-
-""" @app.route("/", methods=['GET', 'POST'])
-def hello_world():
-    if request.method == 'POST':
-        if request.form['message']:
-            con = sqlite3.connect(db_locale)
-            cur = con.cursor()
-            print(f"submitted message is: {request.form['message']}")
-            cur.execute(f'INSERT INTO messages (user_id, message) VALUES (1, "{request.form["message"]}")')
-            con.commit()
-            con.close()
-    return render_template("main_for_user.html") 
-
-
-@app.route("/login", methods=['GET', 'POST'])
+@app.route("/api/login", methods=["GET", "POST"])
 def login():
+    form = LoginForm(request.form)
+    print(form.validate())
+    print(form.data)
     error = None
     if request.method == 'POST' and form.validate():
-            #check their creds against the db
-        else:
-            session_id
-            return redirect('/')
-    return render_template('login.html', error=error) """
+            user = session.query(User).filter(User.username == form.data["username"]).first()
+            if user.password == form.data["password"]:
+                user_model = User()
+                user_model.id = user.id
+                login_user(user_model)
+                return redirect('/')  
+            flash('Incorrect Password')
+            return render_template('login.html', error=error,  form=form)  
+    return render_template('login.html', error=error,  form=form) 
 
-@app.route("/api/login", methods=["POST"])
-def login():
-    print(f"printing the request.form: {request.form}")
-    data = request.form
-    username = data.get("username")
-    password = data.get("password")
-    query = f"SELECT * FROM users WHERE username = '{username}' AND password = '{password}';"
-    print(query)
-
-    con = sqlite3.connect(db_locale)
-    cur = con.cursor()
-    response = cur.execute(query)
-    resp_data = response.fetchone()
-    print(f"printing the response from the db: {resp_data}")
-    if not data:  # An empty result evaluates to False.
-        print("Login failed")
-        con.close()
-        return render_template('login.html', error=error)
-    else:
-        print(f"Welcome {username}")
-        user_model = User()
-        print(f"user model: {user_model}")
-        user_model.id = resp_data[0]
-        print(f"user_model.id: {user_model.id}")
-        login_status = login_user(user_model)
-        flash('Logged in successfully.')
-        con.close()
-        print(f"login status: {login_status}")
-        return redirect("/message")
-    con.close()
-    return flask.render_template('login.html', form=form)
 
 @app.route("/login_page", methods=["GET"])
 def login_page():
-    return render_template("login.html")
+    if current_user.is_authenticated:
+        return redirect("/")
+    form = LoginForm(request.form)
+    return render_template("login.html", form=form)
 
 @app.route("/api/data", methods=["GET"])
 @login_required
 def user_data():
     user = get_user(current_user.id)
-    return jsonify({"username": user["username"]})
+    return jsonify({"id": user["id"], "username": user["username"]})
 
 
 @app.route("/api/getsession")
@@ -192,51 +157,26 @@ def logout():
 @app.route("/api/message", methods=['GET', 'POST'])
 @login_required
 def message(): 
+    user = get_user(current_user.id)
+    message_row = (session.query(Message).filter_by(user_id=user["id"]).first())
+    message_entry = Message(user_id=user["id"], message=request.form['message'])
     if request.method == 'POST':
-        con = sqlite3.connect(db_locale)
-        cur = con.cursor()
-        query = f"REPLACE INTO messages (user_id, message) VALUES ('1', '{request.form['message']}')"
-        cur.execute(query)
-        con.commit()
-        con.close()
-        return jsonify({"saved": True})
+        message_row = (session.query(Message).filter_by(user_id=user["id"]).first())
+        if message_row is None:
+            message_entry = Message(user_id=user["id"], message=request.form['message'])
+            session.add(message_entry)
+            session.commit()
+        else:
+            message_row.message = request.form['message']
+            session.commit()
     if request.method == 'GET':
-        con = sqlite3.connect(db_locale)
-        cur = con.cursor()
-        query = f"SELECT message FROM messages WHERE user_id = '1'"
-        res = cur.execute(query)
-        con.commit()
-        con.close()
-        return jsonify({"message": res.fetchone()})
-
-@app.route("/message", methods=['GET'])
-@login_required
-def message_input(): 
-    con = sqlite3.connect(db_locale)
-    cur = con.cursor()
-    query = f"SELECT message FROM messages WHERE user_id = '1'"
-    res = cur.execute(query)
-    con.commit()
-    con.close()
-    return render_template("main_for_user.html", content_from_db=res.fetchone())
-
-
-''' @app.route("/message", methods=['GET', 'POST'])
-@login_required
-def message(): 
-    con = sqlite3.connect(db_locale)
-    cur = con.cursor()
-    if request.method == 'POST':
-        if request.form['message']:
-            write = cur.execute("""
-            UPDATE messages SET message = "stupid" WHERE user_id = 1
-            """)
-            print(f"the message submitted was {message}")
-    else:    
-        message_data = cur.execute("""
-        SELECT * FROM messages WHERE user_id = 1
-        """)
-        return jsonify({"message": message_data}) '''
+        #check for a message and get it if there is one
+        #message_row = (session.query(Message).filter_by(user_id=User.id).first())
+        #if message_row is None or message_row.message is None:
+        if message_row is None:
+            print(f"No message saved for user: {User.username}")
+            return ""
+        return message_row.message
 
 from wtforms import Form, BooleanField, StringField, PasswordField, validators
 
@@ -263,16 +203,11 @@ def register():
     #breakpoint()
     print(form.validate())
     if request.method == 'POST' and form.validate():
-        
-        #user = User(form.username.data, form.email.data, form.password.data)
-        #db_session.add(user)
-        con = sqlite3.connect(db_locale)
-        cur = con.cursor()
         query = f"INSERT INTO users (username, password) VALUES ('{form.username.data}', '{form.password.data}')"
+        tires_user = User(username=form.username.data, password=form.password.data)
+        session.add(tires_user)
+        session.commit()
         print(query)
-        response = cur.execute(query)
-        con.commit()
-        con.close()
         flash('Thanks for registering')
         return redirect(url_for('home'))
     return render_template('register.html', form=form)

@@ -6,10 +6,9 @@
     <div class="container">
         <label for="message"><b>message</b></label>
         <input type="text" placeholder="put your message here" name="message" 
-        value="{{ content_from_db }}" required>
+        value="{{ message }}" required>
 
         <button type="submit" name="save_message" value="Save">Save</button>
-        <button type="submit" name="write" value="write">write</button>
     </div>
     </form>
 {% endblock %}
