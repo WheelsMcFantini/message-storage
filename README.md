@@ -1,0 +1,1 @@
+This is a simple webapp that allows you to save a single message in a sqlite database. You can register using a username and password and log in to see your message or change your message.
