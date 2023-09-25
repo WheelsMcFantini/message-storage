@@ -1,5 +1,5 @@
 *.db
-*.txt
+scratch.txt
 db-create.py
 db-populate.py
 *.sql
