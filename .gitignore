@@ -3,5 +3,5 @@ scratch.txt
 db-create.py
 db-populate.py
 *.sql
-db*
+db-*
 __pycache__
