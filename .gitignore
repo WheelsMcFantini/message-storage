@@ -5,3 +5,6 @@ db-populate.py
 *.sql
 db-*
 __pycache__
+models/
+instance/
+mkapp.py
