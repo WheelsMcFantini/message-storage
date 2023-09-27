@@ -1,10 +1,3 @@
-*.db
-scratch.txt
-db-create.py
-db-populate.py
-*.sql
-db-*
-__pycache__
-models/
+venv/
 instance/
-mkapp.py
+.gitignore

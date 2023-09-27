@@ -1,4 +1,5 @@
 from flask import Flask, render_template, redirect, jsonify, url_for, request, flash
+from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import (
     LoginManager,
@@ -11,10 +12,12 @@ from flask_login import (
 #from flask_wtf.csrf import CSRFProtect
 from forms.forms import RegistrationForm, LoginForm
 from flask_login import UserMixin
+import json
 
 db = SQLAlchemy()
 
 app = Flask(__name__)
+CORS(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///message.db'
 app.config.update(
     DEBUG=True,
@@ -101,22 +104,24 @@ def home(path):
     else:
         return render_template("landing.html")
 
-@app.route("/api/login", methods=["GET", "POST"])
+@app.route("/api/login", methods=["POST"])
 def login():
-    form = LoginForm(request.form)
-    print(form.validate())
-    print(form.data)
+    data = request.json
+    print(f"the content type: {request.content_type}")
+    print(f"the request data is: {data}")
     error = None
-    if request.method == 'POST' and form.validate():
-            user = db.session.query(User).filter(User.username == form.data["username"]).first()
-            if user.password == form.data["password"]:
-                user_model = User()
-                user_model.id = user.id
-                login_user(user_model)
-                return redirect('/')  
-            flash('Incorrect Password')
-            return render_template('login.html', error=error,  form=form)  
-    return render_template('login.html', error=error,  form=form) 
+    if request.method == 'POST':
+            user = db.session.query(User).filter(User.username == data["username"]).first()
+            if user is not None:
+                if user.password == data["password"]:
+                    user_model = User()
+                    user_model.id = user.id
+                    login_user(user_model)
+                    return {"logged_in": True }
+                flash('Username not Found')
+                return {"logged_in": False }
+            flash('Username not Found')
+            return {"logged_in": False }
 
 
 @app.route("/login_page", methods=["GET"])
