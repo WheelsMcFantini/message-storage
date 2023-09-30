@@ -1,5 +1,5 @@
-from flask import Flask, render_template, redirect, jsonify, url_for, request, flash
-from flask_cors import CORS
+from flask import Flask, render_template, redirect, jsonify, url_for, request, flash, make_response
+from flask_cors import CORS, cross_origin
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import (
     LoginManager,
@@ -9,7 +9,8 @@ from flask_login import (
     login_user,
     logout_user,
 )
-#from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import generate_csrf
 from forms.forms import RegistrationForm, LoginForm
 from flask_login import UserMixin
 import json
@@ -17,14 +18,16 @@ import json
 db = SQLAlchemy()
 
 app = Flask(__name__)
-CORS(app)
+CORS(app,  supports_credentials=True)
+#crsf = CSRFProtect(app) 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///message.db'
 app.config.update(
     DEBUG=True,
     SECRET_KEY="secret_sauce",
+    SESSION_COOKIE_SECURE=False,
     SESSION_COOKIE_HTTPONLY=True,
     REMEMBER_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Strict"
+    SESSION_COOKIE_SAMESITE="None"
 )
 
 class User(db.Model, UserMixin):
@@ -55,17 +58,16 @@ with app.app_context():
     
 login_manager = LoginManager()
 login_manager.init_app(app)
-#login_manager.session_protection = "strong"
-login_manager.login_view = "home"
+login_manager.session_protection = "strong"
 #csrf = CSRFProtect(app)
 
 def get_user(user_id: int):
-    print(f"the user id is {user_id}")
+    #print(f"the user id is {user_id}")
     if (user_id == "None"):
         return None
     else:
         user_by_id = (db.session.query(User).filter_by(id=int(user_id)).first())
-        print(user_by_id)
+        #print(user_by_id)
         if not user_by_id:
             return None
         else:
@@ -76,10 +78,11 @@ def get_user(user_id: int):
 @login_manager.user_loader
 def user_loader(id: int):
     if id is None or id == "None":
+    
         return None
     else:
         user = get_user(id)
-        print(f"{user}")
+        #print(f"{user}")
         if user:
             user_model = User()
             user_model.id = user["id"]
@@ -90,8 +93,6 @@ def user_loader(id: int):
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def home(path):
-    print(f"the db id is:{id(db)}")
-    print(f"the db tables are:{db.metadata.tables.keys()}")
     if current_user.is_authenticated:
         user = get_user(current_user.id)
         message_row = (db.session.query(Message).filter_by(user_id=user["id"]).first())
@@ -105,24 +106,36 @@ def home(path):
         return render_template("landing.html")
 
 @app.route("/api/login", methods=["POST"])
+@cross_origin(methods=['POST'], supports_credentials=True, headers=['Content-Type', 'Authorization'], origin='http://127.0.0.1:3000')
 def login():
     data = request.json
     print(f"the content type: {request.content_type}")
     print(f"the request data is: {data}")
     error = None
     if request.method == 'POST':
+            print(f"Looking up user {data['username']}")
             user = db.session.query(User).filter(User.username == data["username"]).first()
             if user is not None:
+                print(f"user {data['username']} found")
                 if user.password == data["password"]:
+                    print(f"password for user {data['username']} is correct")
                     user_model = User()
                     user_model.id = user.id
                     login_user(user_model)
-                    return {"logged_in": True }
-                flash('Username not Found')
+                    response = make_response({'msg': 'successfully logged in!', "logged_in": True })
+                    response.headers['Access-Control-Allow-Credentials'] = True
+                    response.set_cookie('access_token', value="12345", domain='127.0.0.1')
+                    return response, 200
+                print(f"password for user {data['username']} is not correct")
                 return {"logged_in": False }
-            flash('Username not Found')
+            print(f"user {data['username']} not found")
             return {"logged_in": False }
 
+@app.route("/csrf")
+def get_csrf():
+    response = jsonify(detail="success")
+    response.headers.set("X-CSRFToken", generate_csrf())
+    return response
 
 @app.route("/login_page", methods=["GET"])
 def login_page():
@@ -154,30 +167,47 @@ def logout():
 
 @app.route("/api/message", methods=['GET', 'POST'])
 @login_required
+@cross_origin(methods=['GET', 'POST'], supports_credentials=True, headers=['Content-Type', 'Authorization'], origin='http://127.0.0.1:3000')
 def message(): 
     user = get_user(current_user.id)
+    print(f"recieved request at /api/message from user {user}")
     message_row = (db.session.query(Message).filter_by(user_id=user["id"]).first())
-    message_entry = Message(user_id=user["id"], message=request.form['message'])
     if request.method == 'POST':
+        print(f"recieved POST at /api/message")
+        data = request.json
+        print(f"recieved request json {data}")
+        print(f"recieved message {data['message']}")
+        print(f"request method {request.method}")
         message_row = (db.session.query(Message).filter_by(user_id=user["id"]).first())
+        message_entry = Message(user_id=user["id"], message=data['message'])
         if message_row is None:
-            message_entry = Message(user_id=user["id"], message=request.form['message'])
+            print(f"no existing message for user {data['username']}")
+            message_entry = Message(user_id=user["id"], message=data['message'])
             db.session.add(message_entry)
             db.session.commit()
-            return render_template("main_for_user.html", message=message_row.message)
+            response = make_response({'message_saved': True, 'message': data['message']})
+            return response, 200
         else:
-            message_row.message = request.form['message']
-            db.session.commit()
-            return render_template("main_for_user.html", message=message_row.message)
+            print(f"message found for user {data['username']}")
+            print(f"current message row: {message_row}")
+            message_row.message = data['message']
+            db.session.commit() 
+            message_row = (db.session.query(Message).filter_by(user_id=user["id"]).first())
+            print(f"new message row: {message_row}")
+            response = make_response({'message_saved': True, 'message': message_row.message})
+            return response, 200
     if request.method == 'GET':
-        #check for a message and get it if there is one
+        print(f"recieved GET request at /api/message from user {user}") 
         message_row = (db.session.query(Message).filter_by(user_id=user["id"]).first())
+        print(f"current message row: {message_row}")
         #if message_row is None or message_row.message is None:
         if message_row is None:
             print(f"No message saved for user: {User.username}")
-            return render_template("main_for_user.html")
-        return render_template("main_for_user.html", message=message_row.message)
-
+            #return render_template("main_for_user.html")
+            response = make_response({'message_found': False})
+            return response, 200
+        response = make_response({'message_found': True, 'message': message_row.message})
+        return response, 200
 
 
 @app.route('/register', methods=['GET', 'POST'])
