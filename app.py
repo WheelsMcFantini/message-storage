@@ -15,6 +15,8 @@ from forms.forms import RegistrationForm, LoginForm
 from flask_login import UserMixin
 import json
 
+from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity, get_jwt
+
 db = SQLAlchemy()
 
 app = Flask(__name__)
@@ -27,8 +29,11 @@ app.config.update(
     SESSION_COOKIE_SECURE=False,
     SESSION_COOKIE_HTTPONLY=True,
     REMEMBER_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="None"
+    SESSION_COOKIE_SAMESITE="None",
+    JWT_SECRET_KEY="Bumbus"
 )
+jwt = JWTManager(app)
+
 
 class User(db.Model, UserMixin):
     __tablename__ = "users"
@@ -124,8 +129,11 @@ def login():
                     login_user(user_model)
                     response = make_response({'msg': 'successfully logged in!', "logged_in": True })
                     response.headers['Access-Control-Allow-Credentials'] = True
-                    response.set_cookie('access_token', value="12345", domain='127.0.0.1')
-                    return response, 200
+                    additional_claims = {"user_id": user.id}
+                    access_token = create_access_token(identity={'username': data['username']}, additional_claims=additional_claims)
+                    response.set_cookie('access_token', value=access_token, domain='127.0.0.1')
+                    #return response, 200
+                    return jsonify(access_token=access_token), 200
                 print(f"password for user {data['username']} is not correct")
                 return {"logged_in": False }
             print(f"user {data['username']} not found")
@@ -146,6 +154,7 @@ def login_page():
 
 @app.route("/api/data", methods=["GET"])
 @login_required
+@jwt_required()
 def user_data():
     user = get_user(current_user.id)
     return jsonify({"id": user["id"], "username": user["username"]})
@@ -161,48 +170,53 @@ def check_session():
 
 @app.route("/api/logout", methods=["POST"])
 @login_required
+@jwt_required()
 def logout():
     logout_user()
     return redirect('/')
 
 @app.route("/api/message", methods=['GET', 'POST'])
-@login_required
+#@login_required
+@jwt_required()
 @cross_origin(methods=['GET', 'POST'], supports_credentials=True, headers=['Content-Type', 'Authorization'], origin='http://127.0.0.1:3000')
 def message(): 
-    user = get_user(current_user.id)
+    print(f"{get_jwt_identity()}")
+    print(f"{get_jwt()}")
+    user = get_jwt()
+    username = get_jwt_identity()["username"]
+    #user = get_user(current_user.id)
     print(f"recieved request at /api/message from user {user}")
-    message_row = (db.session.query(Message).filter_by(user_id=user["id"]).first())
+    message_row = db.session.query(User).filter(User.username == username).first()
     if request.method == 'POST':
         print(f"recieved POST at /api/message")
         data = request.json
         print(f"recieved request json {data}")
-        print(f"recieved message {data['message']}")
         print(f"request method {request.method}")
-        message_row = (db.session.query(Message).filter_by(user_id=user["id"]).first())
-        message_entry = Message(user_id=user["id"], message=data['message'])
+        message_row = (db.session.query(Message).filter_by(user_id=user["user_id"]).first())
+        #message_entry = Message(user_id=user["user_id"], message=data['text'])
         if message_row is None:
             print(f"no existing message for user {data['username']}")
-            message_entry = Message(user_id=user["id"], message=data['message'])
+            message_entry = Message(user_id=user["user_id"], message=data['message'])
             db.session.add(message_entry)
             db.session.commit()
             response = make_response({'message_saved': True, 'message': data['message']})
             return response, 200
         else:
-            print(f"message found for user {data['username']}")
+            print(f"message found for user {username}")
             print(f"current message row: {message_row}")
-            message_row.message = data['message']
+            message_row.message = data['text']
             db.session.commit() 
-            message_row = (db.session.query(Message).filter_by(user_id=user["id"]).first())
+            message_row = (db.session.query(Message).filter_by(user_id=user["user_id"]).first())
             print(f"new message row: {message_row}")
             response = make_response({'message_saved': True, 'message': message_row.message})
             return response, 200
     if request.method == 'GET':
         print(f"recieved GET request at /api/message from user {user}") 
-        message_row = (db.session.query(Message).filter_by(user_id=user["id"]).first())
+        message_row = (db.session.query(Message).filter_by(user_id=user["user_id"]).first())
         print(f"current message row: {message_row}")
         #if message_row is None or message_row.message is None:
         if message_row is None:
-            print(f"No message saved for user: {User.username}")
+            print(f"No message saved for user: {username}")
             #return render_template("main_for_user.html")
             response = make_response({'message_found': False})
             return response, 200
