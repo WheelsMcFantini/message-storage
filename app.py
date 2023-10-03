@@ -169,7 +169,7 @@ def check_session():
 
 
 @app.route("/api/logout", methods=["POST"])
-@login_required
+#@login_required
 @jwt_required()
 def logout():
     logout_user()
